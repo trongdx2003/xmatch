@@ -19,14 +19,14 @@ from xmatch import shallow_match, deep_match
 expr1 = "a + b"
 expr2 = "x + y"
 expr3 = "x ** 2 + y"
-expr4 = "z**2 + t + k"
+expr4 = "z ** 2 + t"
 
 print(deep_match(expr1, expr2))
 # {('a', 'x'), ('b', 'y')}
 
 print(shallow_match(expr3, expr4))
-# {('x ** 2', 'z ** 2'), ('y', 't + k')}
+# {('x ** 2', 'z ** 2'), ('y', 't')}
 
 print(deep_match(expr3, expr4))
-# {('x', 'z'), ('y', 't + k')}
+# {('x', 'z'), ('y', 't')}
 ```
