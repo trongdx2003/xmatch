@@ -5,16 +5,16 @@
 I do this project for fun. 
 
 * The `xm` module provides three functions `shallow_match`, `deep_match`, `many_match`. They parse two algebraic expressions into ASTs and match their left-right components respectively.
-* The `thmm` module is under development. It will provide a class `Theorem` to determine whether a proposition and a theorem mismatch.
+* The `thmm` module is still under development. It will provide a class `Theorem` to determine whether a proposition and a theorem mismatch.
 
-It is somewhat useful for verifying natural inequality proofs from Large Language Models (LLMs). Because LLMs could hallucinate, they may produce wrong applications of inequality theorems when manipulating symbols. This tool will provide them feedbacks to refine their proofs (if mismatched results are found).
+It is somewhat useful for verifying natural inequality proofs from Large Language Models (LLMs). Because LLMs could hallucinate, they may produce wrong applications of inequality theorems when manipulating symbols. This tool will provide them feedbacks to refine their proofs (if any mismatches are found).
 
 ## Examples
 
-Please see `xmatch/xm.py` for more details.
+See `xmatch/xm.py` for more details.
 
 ```python
-from xmatch import shallow_match, deep_match
+from xm import shallow_match, deep_match, many_match
 
 expr1 = "a + b"
 expr2 = "x + y"
