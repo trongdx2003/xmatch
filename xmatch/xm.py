@@ -1,5 +1,9 @@
 import ast
+from itertools import permutations, product
+from typing import List, Set, Tuple, Any
 
+
+COMMUTATIVE_OPS = (ast.Add, ast.Mult)
 
 def shallow_match(expr1: str, expr2: str, power_as_atomic: bool = True):
     """Parsing two algebraic expressions into ASTs and matches their left-right components respectively.
@@ -62,6 +66,8 @@ def shallow_match(expr1: str, expr2: str, power_as_atomic: bool = True):
         else:
             if isinstance(x, ast.Constant) and isinstance(y, ast.Constant) and x.value == y.value and results:
                 continue
+            if not power_as_atomic:
+                return set()
             results.add((ast.unparse(x), ast.unparse(y)))
 
     return results
@@ -138,6 +144,122 @@ def deep_match(expr1: str, expr2: str, power_as_atomic: bool = True):
         else:
             if isinstance(x, ast.Constant) and isinstance(y, ast.Constant) and x.value == y.value and results:
                 continue
+            if not power_as_atomic:
+                return set()
             results.add((ast.unparse(x), ast.unparse(y)))
 
     return results
+
+
+def _reconstruct_left_assoc(operands: List[ast.AST], op_cls: type) -> ast.AST:
+    """Reconstruct a left-associative binary tree from operands with operator class op_cls."""
+    if not operands:
+        raise ValueError("no operands to reconstruct")
+    if len(operands) == 1:
+        return operands[0]
+    cur = ast.BinOp(left=operands[0], op=op_cls(), right=operands[1])
+    for opnd in operands[2:]:
+        cur = ast.BinOp(left=cur, op=op_cls(), right=opnd)
+    return cur
+
+
+def _flatten_same_op(node: ast.BinOp, op_cls: type) -> List[ast.AST]:
+    """Flatten a tree of the same binary operator (associativity).
+    Example: (a + (b + c)) -> [a, b, c] when op_cls is ast.Add.
+    """
+    res = []
+
+    def _collect(n: ast.AST):
+        if isinstance(n, ast.BinOp) and isinstance(n.op, op_cls):
+            _collect(n.left)
+            _collect(n.right)
+        else:
+            res.append(n)
+
+    _collect(node)
+    return res
+
+
+def _variants(node: ast.AST, power_as_atomic: bool) -> List[ast.AST]:
+    """
+    Return a list of AST nodes representing all structually-equivalent forms
+    of `node` under associativity/commutativity of + and * (and recursion).
+    """
+    if not isinstance(node, ast.BinOp):
+        return [node]
+
+    if isinstance(node.op, ast.Pow) and power_as_atomic:
+        return [node]
+
+    if isinstance(node.op, COMMUTATIVE_OPS):
+        op_cls = type(node.op)
+        flat_operands = _flatten_same_op(node, op_cls)
+        operand_variants_lists = [ _variants(opnd, power_as_atomic) for opnd in flat_operands ]
+
+        results = []
+        for chosen_operands in product(*operand_variants_lists):
+            perm_seen = set()
+            for perm in permutations(chosen_operands):
+                try:
+                    key = tuple(ast.unparse(p) for p in perm)
+                except Exception:
+                    key = tuple(ast.dump(p) for p in perm)
+                if key in perm_seen:
+                    continue
+                perm_seen.add(key)
+                new_node = _reconstruct_left_assoc(list(perm), op_cls)
+                results.append(new_node)
+
+        return results
+
+    left_vars = _variants(node.left, power_as_atomic)
+    right_vars = _variants(node.right, power_as_atomic)
+    res = []
+    for L, R in product(left_vars, right_vars):
+        new_node = ast.BinOp(left=L, op=type(node.op)(), right=R)
+        res.append(new_node)
+    return res
+
+
+def many_match(expr1: str, expr2: str, power_as_atomic: bool = True, mode: str = "deep") -> List[Set[Tuple[Any, Any]]]:
+    """
+    Enumerate all valid matchings between expr1 and expr2 by:
+      - generating all AST-level variants of expr1 under associativity/commutativity of + and *
+      - calling base matcher (deep_match or shallow_match) on each variant vs expr2
+      - collecting all non-empty match sets as individual matchings (no merging)
+
+    Returns:
+        list[ set[ (lhs, rhs) ] ]  -- each element is one consistent matching
+    """
+    if mode == "deep":
+        matcher = deep_match
+    elif mode == "shallow":
+        matcher = shallow_match
+    else:
+        raise ValueError("Mode must be 'deep' or 'shallow'")
+
+    try:
+        t1 = ast.parse(expr1, mode="eval").body
+    except SyntaxError:
+        return []
+
+    variants_nodes = _variants(t1, power_as_atomic)
+
+    results_list = []
+    seen = set()
+
+    for v in variants_nodes:
+        try:
+            v_str = ast.unparse(v)
+        except Exception:
+            v_str = expr1
+
+        match_set = matcher(v_str, expr2, power_as_atomic)
+        if match_set:
+            key = frozenset(match_set)
+            if key in seen:
+                continue
+            seen.add(key)
+            results_list.append(set(match_set))
+
+    return results_list
